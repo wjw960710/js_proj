@@ -1,0 +1,353 @@
+import { vi } from 'vitest'
+import {
+	FetchpCacheCallCaches,
+	type FetchpTransformUrlCaches,
+	FetchpMergeCallCaches,
+	FetchpParams,
+} from '@pkg/fetchp/fetchp.type.ts'
+import { transformUrl } from '@pkg/fetchp/utils/transform-url.ts'
+import { setHeaders, setHeadersContentType } from '@pkg/fetchp/utils/set-headers.ts'
+import { mergeCall, mergeId } from '@pkg/fetchp/utils/merge-call.ts'
+import { cacheCall } from '@pkg/fetchp/utils/cache-call.ts'
+
+describe('pkg fetchp', () => {
+	beforeEach(() => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async () => {
+				await sleep(250)
+				return createBaseMockSuccessResponse()
+			}),
+		)
+	})
+
+	afterEach(() => {
+		vi.unstubAllGlobals()
+	})
+
+	it('全整合測試', async () => {
+		// TODO FetchpParams, cancel 機制
+		async function fetchp(pUrl: string, params = {} as FetchpParams) {
+			const init: RequestInit = {}
+			const { method, url } = transformUrl({
+				url: pUrl,
+				pathParams: params.pathParams,
+			})
+			init.method = method
+
+			const id = mergeId(method, url, params.params)
+			const apiCall = async () =>
+				mergeCall({
+					id,
+					call: async () => {
+						setHeadersContentType(init, params)
+						const res = await fetch(url, init)
+						return customResponse(res)
+					},
+				})
+
+			return cacheCall({
+				id,
+				call: apiCall,
+				ignoreCache: res => res !== false,
+			})
+		}
+	})
+
+	it('測試緩存響應', async () => {
+		let fetchCount = 0
+
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async (input: string) => {
+				fetchCount++
+				await sleep(250)
+				if (input === '1') return createBaseMockSuccessResponse()
+				return createBaseMockFailResponse()
+			}),
+		)
+
+		async function fetchp(
+			input: string,
+			{
+				params,
+				updateCache,
+				remove,
+			}: {
+				params?: Record<string, string | number>
+				updateCache?: (res: any) => boolean
+				remove?: boolean
+			} = {},
+		) {
+			const id = mergeId(input, params)
+			const apiCall = async () => {
+				const res = await fetch(input)
+				return customResponse(res)
+			}
+
+			return cacheCall({
+				id,
+				call: apiCall,
+				caches,
+				ignoreCache: res => res !== false,
+				updateCache,
+				remove,
+			})
+		}
+
+		const caches: FetchpCacheCallCaches = new Map()
+		const res = await fetchp('1')
+		await fetchp('1')
+		expect(res.version).toBe('1.0.0')
+		expect(fetchCount).toBe(1)
+		expect(caches.size).toBe(1)
+
+		const res2 = await fetchp('1', {
+			updateCache: res => ({ ...res, version: '2.0.0' }),
+		})
+		expect(res2.version).toBe('2.0.0')
+		expect(fetchCount).toBe(1)
+		expect(caches.size).toBe(1)
+
+		const res3 = await fetchp('1')
+		expect(res3.version).toBe('2.0.0')
+		expect(fetchCount).toBe(1)
+		expect(caches.size).toBe(1)
+
+		const res4 = await fetchp('1', { remove: true })
+		await fetchp('1', { params: { id: 1 }, remove: true })
+		expect(res4.version).toBe('1.0.0')
+		expect(fetchCount).toBe(3)
+		expect(caches.size).toBe(2)
+
+		const [res5, res5_2] = await Promise.all([fetchp('2'), fetchp('2')])
+		expect(res5.version).toBeUndefined()
+		expect(res5_2).toBe(false)
+		expect(fetchCount).toBe(5)
+		expect(caches.size).toBe(2)
+	})
+
+	it('測試連環調用是否會等待第一個響應結果', async () => {
+		let fetchCount = 0
+
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async () => {
+				fetchCount++
+				await sleep(Math.random() * 250 + 100)
+				return createBaseMockSuccessResponse()
+			}),
+		)
+
+		const mergeCallCaches: FetchpMergeCallCaches = new Map()
+		async function fetchp(input: string, params: Record<string, string | number> = {}) {
+			const id = mergeId(input, params)
+			const apiCall = async () => {
+				const res = await fetch(input)
+				return customResponse(res)
+			}
+
+			return mergeCall({ id, call: apiCall, caches: mergeCallCaches })
+		}
+
+		const res1 = await Promise.all(
+			Array(5)
+				.fill(0)
+				.map(() => fetchp('{get}http://aaa.bbb')),
+		)
+
+		expect(fetchCount).toBe(1)
+		expect(res1).toEqual(Array(5).fill({ version: '1.0.0' }))
+		expect(mergeCallCaches.get('gethttp://aaa.bbb')).toBeUndefined()
+
+		fetchp('{get}http://aaa.bbb')
+		await fetchp('{get}http://aaa.bbb')
+		expect(fetchCount).toBe(2)
+		await fetchp('{get}http://aaa.bbb')
+		expect(mergeCallCaches.size).toBe(0)
+		expect(fetchCount).toBe(3)
+
+		await fetchp('{get}http://aaa.bbb', { id: 1, name: 'frank' })
+		await fetchp('{get}http://aaa.bbb', { id: 1, name: 'frank' })
+		expect(mergeCallCaches.size).toBe(0)
+		expect(fetchCount).toBe(5)
+
+		await Promise.all([
+			fetchp('{get}http://aaa.bbb', { id: 1, name: 'frank' }),
+			fetchp('{get}http://aaa.bbb', { id: 1, name: 'frank' }),
+			fetchp('{get}http://aaa.bbb', { id: 1, name: 'jeff' }),
+			fetchp('{get}http://aaa.bbb'),
+		])
+		expect(mergeCallCaches.size).toBe(0)
+		expect(fetchCount).toBe(8)
+	})
+
+	it('驗證 setHeaders 相關函數是否正確', () => {
+		const reqInit1: ResponseInit = {}
+		setHeadersContentType(reqInit1, { bodyJson: { hello: 'world' } })
+		expect(reqInit1.headers).toBeDefined()
+		expect((reqInit1.headers as Headers).get('Content-Type')).toBe('application/json')
+
+		const reqInit2: ResponseInit = {}
+		setHeadersContentType(reqInit2, { bodyFormData: new FormData() })
+		expect(reqInit2.headers).toBeDefined()
+		expect((reqInit2.headers as Headers).get('Content-Type')).toBe('multipart/form-data')
+
+		const reqInit3: ResponseInit = {}
+		setHeadersContentType(reqInit3, { bodyUrlEncoded: new URLSearchParams() })
+		expect(reqInit3.headers).toBeDefined()
+		expect((reqInit3.headers as Headers).get('Content-Type')).toBe(
+			'application/x-www-form-urlencoded',
+		)
+
+		const reqInit4: ResponseInit = {
+			headers: [],
+		}
+		setHeadersContentType(reqInit4, { bodyJson: { hello: 'world' } })
+		expect((reqInit4.headers as [string, string][])[0][0]).toBe('Content-Type')
+		expect((reqInit4.headers as [string, string][])[0][1]).toBe('application/json')
+
+		const headers1 = new Headers()
+		setHeaders(headers1, 'hello', 'world')
+		expect(headers1.get('hello')).toBe('world')
+
+		const headers2: [string, string][] = []
+		setHeaders(headers2, 'hello', 'world')
+		setHeaders(headers2, 'hello', 'world')
+		expect(headers2.length).toBe(2)
+		expect(headers2[0][1]).toBe('world')
+
+		const headers3: Record<string, string> = {}
+		setHeaders(headers3, 'hello', 'world')
+		expect(headers3['hello']).toBe('world')
+	})
+
+	it('驗證 URL 轉換是否正確', () => {
+		const caches: FetchpTransformUrlCaches = new Map()
+
+		expect(caches.get('{get/api/user')).toBeUndefined()
+		expect(
+			transformUrl({
+				url: '{get/api/user',
+				caches,
+			}),
+		).toEqual({
+			method: 'get',
+			url: '',
+		})
+		expect(caches.get('{get/api/user')).toBeDefined()
+
+		expect(
+			transformUrl({
+				url: '{get/api/user',
+				caches,
+			}),
+		).toEqual({
+			method: 'get',
+			url: '',
+		})
+
+		expect(
+			transformUrl({
+				url: '{get/api/user',
+				pathParams: { 'get/api/user': '123' },
+				caches,
+			}),
+		).toEqual({
+			method: 'get',
+			url: '',
+		})
+
+		expect(
+			transformUrl({
+				url: '{get}/api/user',
+				caches,
+			}),
+		).toEqual({
+			method: 'get',
+			url: '/api/user',
+		})
+
+		expect(
+			transformUrl({
+				url: '{get}/api/user/{id}',
+				caches,
+			}),
+		).toEqual({
+			method: 'get',
+			url: '/api/user/undefined',
+		})
+
+		expect(caches.get('{get}/api/user/{id}')).toBeDefined()
+		expect(
+			transformUrl({
+				url: '{post}/api/user/{id}',
+				pathParams: { id: '123' },
+				caches,
+			}),
+		).toEqual({
+			method: 'post',
+			url: '/api/user/123',
+		})
+		expect(caches.get('{post}/api/user/{id}')).toBeDefined()
+
+		expect(
+			transformUrl({
+				url: '{get}/api/user/{id}/job/{name}',
+				pathParams: { id: '123', name: 'frank' },
+				caches,
+			}),
+		).toEqual({
+			method: 'get',
+			url: '/api/user/123/job/frank',
+		})
+
+		expect(
+			transformUrl({
+				url: '{get}/api/user/{id}/job/{name}',
+				pathParams: { hello: '123', name: 'frank' },
+				caches,
+			}),
+		).toEqual({
+			method: 'get',
+			url: '/api/user/undefined/job/frank',
+		})
+
+		expect(caches.size).toBe(5)
+	})
+
+	function createBaseMockSuccessResponse() {
+		return {
+			ok: true,
+			status: 200,
+			json: async () => {
+				return { code: '200', data: { version: '1.0.0' } }
+			},
+			headers: new Headers(),
+		}
+	}
+
+	function createBaseMockFailResponse() {
+		return {
+			ok: false,
+			status: 500,
+			json: async () => {
+				return { code: '500', data: null }
+			},
+			headers: new Headers(),
+		}
+	}
+
+	async function customResponse(res: Response) {
+		if (res.ok && res.status >= 200 && res.status < 300) {
+			const data = await res.json()
+			if (data.code === '200') return data.data
+		}
+
+		return false
+	}
+
+	function sleep(timeout: number) {
+		return new Promise(resolve => setTimeout(resolve, timeout))
+	}
+})
