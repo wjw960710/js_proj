@@ -16,14 +16,23 @@ self.addEventListener('fetch', (event) => {
   const isDocRequest = request.mode === 'navigate' ||
                        (request.method === 'GET' && request.headers.get('accept')?.includes('text/html'));
 
+  // 判斷是否為 JS 檔案 (Script)
+  // 這對應到 Chrome DevTool Network 的 "JS" 分類
+  const isScriptRequest = request.url.match(/\.(js|jsx)$/) ||
+                          request.headers.get('accept')?.includes('application/javascript');
+
+  // 判斷是否為 CSS 檔案 (Stylesheet)
+  // 這對應到 Chrome DevTool Network 的 "CSS" 分類
+  const isStyleRequest = request.url.match(/\.css$/) ||
+                         request.headers.get('accept')?.includes('text/css');
+
   if (isDocRequest) {
     console.log('Detected navigation to entry file (Doc):', request.url);
 
-    // 使用 Network First 策略並緩存到 Cache Storage
+    // 使用 Network First 策略並緩存到 html-cache-v1
     event.respondWith(
       fetch(request)
         .then((response) => {
-          // 如果網絡請求成功，將響應放入緩存
           if (response.ok) {
             const copy = response.clone();
             event.waitUntil(
@@ -33,7 +42,25 @@ self.addEventListener('fetch', (event) => {
           return response;
         })
         .catch(() => {
-          // 網絡請求失敗（如離線），從緩存中獲取
+          return caches.match(request);
+        })
+    );
+  } else if (isScriptRequest || isStyleRequest) {
+    console.log(`Detected resource (${isScriptRequest ? 'JS' : 'CSS'}):`, request.url);
+
+    // 使用 Network First 策略並緩存到 asset-cache-v1
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          if (response.ok) {
+            const copy = response.clone();
+            event.waitUntil(
+              caches.open('asset-cache-v1').then((cache) => cache.put(request, copy))
+            );
+          }
+          return response;
+        })
+        .catch(() => {
           return caches.match(request);
         })
     );

@@ -26,6 +26,9 @@
 所有入口共享同一個 AppRouter.tsx。根據傳入的 title，路由系統會分發到不同的頁面組件（如 App.tsx 或 VitePage.tsx），並支援基礎的路徑導向（如 /admin, /client）。
 
 5. PWA 與 Service Worker 實現
+本專案手動實作 Service Worker 邏輯（`src/sw.js`），提供以下功能：
+- **HTML 入口緩存**：針對 `Doc` 分類資源，使用 Network First 策略，存於 `html-cache-v1`。
+- **靜態資源緩存 (JS/CSS)**：針對腳本與樣式資源，使用 Network First 策略，統一存於 `asset-cache-v1`。
 詳細實作內容請參閱 [SW_IMPLEMENTATION.md](./SW_IMPLEMENTATION.md)。
 
 6. agent 運作流程
