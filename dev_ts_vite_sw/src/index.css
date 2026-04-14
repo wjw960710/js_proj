@@ -50,6 +50,14 @@
   }
 }
 
+#root:has(.full-screen-iframe) {
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
+  border: none;
+  min-height: 100vh;
+}
+
 #root {
   width: 1126px;
   max-width: 100%;
