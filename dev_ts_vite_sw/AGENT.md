@@ -26,10 +26,8 @@
 所有入口共享同一個 AppRouter.tsx。根據傳入的 title，路由系統會分發到不同的頁面組件（如 App.tsx 或 VitePage.tsx），並支援基礎的路徑導向（如 /admin, /client）。
 
 5. PWA 與 Service Worker 實現
-- 使用 vite-plugin-pwa 套件進行管理。
-- 策略配置：採用 injectManifest 策略，指向 src/sw.js。
-- Service Worker 功能：包含基礎的生命週期監聽（install, activate, fetch），目前設為自動跳過等待並接管頁面。
-- Manifest 配置：定義了應用名稱、圖標與佈景主題顏色，確保符合 PWA 安裝標準。
+詳細實作內容請參閱 [SW_IMPLEMENTATION.md](./SW_IMPLEMENTATION.md)。
 
 6. agent 運作流程
 - 在調整完代碼後不需要進行 dev(運行) 與 build(打包)驗證，都由使用者自行驗證即可
+- **本文件變動同步要求**：後續每次對專案功能的改動（尤其是 Service Worker 相關），皆須同步更新 `AGENT.md` 及對應的引用文件。
