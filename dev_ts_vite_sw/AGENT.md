@@ -27,10 +27,18 @@
 
 5. PWA 與 Service Worker 實現
 本專案手動實作 Service Worker 邏輯（`src/sw.js`），提供以下功能：
-- **HTML 入口緩存**：針對 `Doc` 分類資源，使用 Network First 策略，存於 `html-cache-v1`。
-- **靜態資源緩存 (JS/CSS)**：針對腳本與樣式資源，使用 Network First 策略，統一存於 `asset-cache-v1`。
+- **HTML 入口緩存**：針對 `Doc` 分類資源，使用 Network First 策略，且僅在響應包含 `X-Tag: test` 標頭時存於 `html-cache-v1`。
+- **靜態資源緩存 (JS/CSS)**：針對腳本與樣式資源，使用 Network First 策略，且僅在響應包含 `X-Tag: test` 標頭時統一存於 `asset-cache-v1`。
 詳細實作內容請參閱 [SW_IMPLEMENTATION.md](./SW_IMPLEMENTATION.md)。
 
-6. agent 運作流程
+7. 伺服器端請求攔截 (Request Interception)
+在 `vite.config.ts` 中配置了自定義插件 `request-intercept`，攔截所有傳向伺服器的請求。
+- **路徑特定處理**：
+    - 使用 `new URL(url, 'http://localhost').pathname` 提取路徑，確保精確識別包含查詢參數的請求。
+    - 針對 `/`, `/admin`, `/client` 及其 HTML 路徑預留了條件分支（目前為空實現，不添加標頭）。
+    - 對於**非上述路徑**的其他所有請求，響應中會加上 `X-Tag: test` 的 HTTP 標頭。
+支援開發伺服器 (`configureServer`) 與預覽伺服器 (`configurePreviewServer`)。
+
+8. agent 運作流程
 - 在調整完代碼後不需要進行 dev(運行) 與 build(打包)驗證，都由使用者自行驗證即可
-- **本文件變動同步要求**：後續每次對專案功能的改動（尤其是 Service Worker 相關），皆須同步更新 `AGENT.md` 及對應的引用文件。
+- **本文件變動同步要求**：後續每次對專案功能的改動（尤其是 Service Worker 與伺服器攔截相關），皆須同步更新 `AGENT.md` 及對應的引用文件。

@@ -16,6 +16,47 @@ export default defineConfig({
   },
   plugins: [
     react(),
+    {
+      name: 'request-intercept',
+      configureServer(server) {
+        server.middlewares.use((req, res, next) => {
+          const url = req.url || '/';
+          // 使用 new URL(url, 'http://localhost') 提取 pathname，確保正確處理查詢參數
+          const pathname = new URL(url, 'http://localhost').pathname;
+
+          if (pathname === '/' || pathname === '/index.html') {
+            // 空實現：主要入口路徑不添加 X-Tag
+          } else if (pathname === '/admin' || pathname === '/admin.html') {
+            // 空實現
+          } else if (pathname === '/client' || pathname === '/client.html') {
+            // 空實現
+          } else {
+            // 為非主要入口請求加上 X-Tag: test 標頭
+            res.setHeader('X-Tag', 'test');
+          }
+          next();
+        });
+      },
+      configurePreviewServer(server) {
+        server.middlewares.use((req, res, next) => {
+          const url = req.url || '/';
+          // 使用 new URL(url, 'http://localhost') 提取 pathname
+          const pathname = new URL(url, 'http://localhost').pathname;
+
+          if (pathname === '/' || pathname === '/index.html') {
+            // 空實現
+          } else if (pathname === '/admin' || pathname === '/admin.html') {
+            // 空實現
+          } else if (pathname === '/client' || pathname === '/client.html') {
+            // 空實現
+          } else {
+            // 為非主要入口請求加上 X-Tag: test 標頭
+            res.setHeader('X-Tag', 'test');
+          }
+          next();
+        });
+      }
+    },
     VitePWA({
       strategies: 'injectManifest',
       srcDir: 'src',

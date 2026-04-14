@@ -29,15 +29,19 @@ self.addEventListener('fetch', (event) => {
   if (isDocRequest) {
     console.log('Detected navigation to entry file (Doc):', request.url);
 
-    // 使用 Network First 策略並緩存到 html-cache-v1
+    // 使用 Network First 策略並緩存到 html-cache-v1 (需驗證 X-Tag: test)
     event.respondWith(
       fetch(request)
         .then((response) => {
-          if (response.ok) {
+          const xTag = response.headers.get('X-Tag');
+          console.log(`[SW] Doc Request: ${request.url}, X-Tag: ${xTag}`);
+          if (response.ok && xTag === 'test') {
             const copy = response.clone();
             event.waitUntil(
               caches.open('html-cache-v1').then((cache) => cache.put(request, copy))
             );
+          } else if (xTag !== 'test') {
+            console.warn(`Cache skipped: X-Tag verification failed for ${request.url}`);
           }
           return response;
         })
@@ -48,15 +52,19 @@ self.addEventListener('fetch', (event) => {
   } else if (isScriptRequest || isStyleRequest) {
     console.log(`Detected resource (${isScriptRequest ? 'JS' : 'CSS'}):`, request.url);
 
-    // 使用 Network First 策略並緩存到 asset-cache-v1
+    // 使用 Network First 策略並緩存到 asset-cache-v1 (需驗證 X-Tag: test)
     event.respondWith(
       fetch(request)
         .then((response) => {
-          if (response.ok) {
+          const xTag = response.headers.get('X-Tag');
+          console.log(`[SW] Asset Request: ${request.url}, X-Tag: ${xTag}`);
+          if (response.ok && xTag === 'test') {
             const copy = response.clone();
             event.waitUntil(
               caches.open('asset-cache-v1').then((cache) => cache.put(request, copy))
             );
+          } else if (xTag !== 'test') {
+            console.warn(`Cache skipped: X-Tag verification failed for ${request.url}`);
           }
           return response;
         })
