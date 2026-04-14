@@ -29,26 +29,50 @@ self.addEventListener('fetch', (event) => {
   if (isDocRequest) {
     console.log('Detected navigation to entry file (Doc):', request.url);
 
-    // 使用 Network First 策略並緩存到 html-cache-v1 (需驗證 X-Tag: test)
-    event.respondWith(
-      fetch(request)
-        .then((response) => {
+    // 順序嘗試路徑：/ > /client > /admin
+    const fallbackPaths = ['/', '/client', '/admin'];
+
+    const tryFetchAndCache = async () => {
+      // 1. 先嘗試原始請求
+      try {
+        const response = await fetch(request);
+        const xTag = response.headers.get('X-Tag');
+        if (response.ok && xTag === 'test') {
+          const copy = response.clone();
+          await caches.open('html-cache-v1').then((cache) => cache.put(request, copy));
+          return response;
+        }
+      } catch (e) {
+        // 網絡錯誤時嘗試從緩存中獲取
+        const cachedResponse = await caches.match(request);
+        if (cachedResponse) return cachedResponse;
+      }
+
+      // 2. 原始請求失敗或 X-Tag 不匹配，按順序嘗試預設路徑
+      let lastResponse = null;
+      for (const path of fallbackPaths) {
+        try {
+          const response = await fetch(path);
+          lastResponse = response;
           const xTag = response.headers.get('X-Tag');
-          console.log(`[SW] Doc Request: ${request.url}, X-Tag: ${xTag}`);
+          console.log(`[SW] Trying fallback path: ${path}, X-Tag: ${xTag}`);
+
           if (response.ok && xTag === 'test') {
             const copy = response.clone();
-            event.waitUntil(
-              caches.open('html-cache-v1').then((cache) => cache.put(request, copy))
-            );
-          } else if (xTag !== 'test') {
-            console.warn(`Cache skipped: X-Tag verification failed for ${request.url}`);
+            // 注意：將 fallback 路徑的響應緩存在原始請求的 URL 下
+            await caches.open('html-cache-v1').then((cache) => cache.put(request, copy));
+            return response;
           }
-          return response;
-        })
-        .catch(() => {
-          return caches.match(request);
-        })
-    );
+        } catch (e) {
+          console.error(`[SW] Error fetching fallback path ${path}:`, e);
+        }
+      }
+
+      // 3. 若所有路徑皆無 X-Tag: test，則響應最後嘗試的內容（若最後嘗試失敗且無 response，則重新 fetch 原始請求作為保險）
+      return lastResponse || fetch(request);
+    };
+
+    event.respondWith(tryFetchAndCache());
   } else if (isScriptRequest || isStyleRequest) {
     console.log(`Detected resource (${isScriptRequest ? 'JS' : 'CSS'}):`, request.url);
 

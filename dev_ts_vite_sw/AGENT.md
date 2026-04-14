@@ -27,7 +27,7 @@
 
 5. PWA 與 Service Worker 實現
 本專案手動實作 Service Worker 邏輯（`src/sw.js`），提供以下功能：
-- **HTML 入口緩存**：針對 `Doc` 分類資源，使用 Network First 策略，且僅在響應包含 `X-Tag: test` 標頭時存於 `html-cache-v1`。
+- **HTML 入口緩存**：針對 `Doc` 分類資源，優先驗證原始請求的 `X-Tag: test`。若驗證失敗，則按順序嘗試 `/` > `/client` > `/admin` 獲取有效的緩存響應。若全部失敗，則響應最後嘗試的路徑內容。
 - **靜態資源緩存 (JS/CSS)**：針對腳本與樣式資源，使用 Network First 策略，且僅在響應包含 `X-Tag: test` 標頭時統一存於 `asset-cache-v1`。
 詳細實作內容請參閱 [SW_IMPLEMENTATION.md](./SW_IMPLEMENTATION.md)。
 
