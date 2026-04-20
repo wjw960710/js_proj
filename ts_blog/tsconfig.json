@@ -1,0 +1,39 @@
+{
+	"$schema": "https://json.schemastore.org/tsconfig",
+	"compilerOptions": {
+		"incremental": true,
+		"target": "esnext",
+		"emitDecoratorMetadata": true,
+		"experimentalDecorators": true,
+		"baseUrl": ".",
+		"module": "NodeNext",
+		"moduleResolution": "NodeNext",
+		"paths": {
+			"@/*": ["./src/*"]
+		},
+		"resolveJsonModule": true,
+		"allowJs": true,
+		"strict": true,
+		"strictBindCallApply": false,
+		"strictNullChecks": false,
+		"alwaysStrict": true,
+		"noFallthroughCasesInSwitch": false,
+		"noImplicitAny": true,
+		"noImplicitReturns": true,
+		"noUnusedLocals": true,
+		"declaration": true,
+		"declarationMap": true,
+		"importsNotUsedAsValues": "remove",
+		"noEmit": false,
+		"outDir": "./dist",
+		"removeComments": true,
+		"sourceMap": true,
+		"allowSyntheticDefaultImports": true,
+		"esModuleInterop": true,
+		"forceConsistentCasingInFileNames": true,
+		"isolatedModules": true,
+		"skipLibCheck": true,
+		"pretty": true
+	},
+	"include": ["src", "test", "typings/**/*.d.ts", "**/*spec.ts"]
+}
